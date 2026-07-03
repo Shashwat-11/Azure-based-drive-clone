@@ -1,0 +1,30 @@
+FROM python:3.13-slim AS builder
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+FROM python:3.13-slim AS runtime
+
+RUN groupadd -r drive && useradd -r -g drive drive
+
+WORKDIR /app
+
+COPY --from=builder /root/.local /home/drive/.local
+ENV PATH=/home/drive/.local/bin:$PATH
+ENV PYTHONPATH=/app
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV ENVIRONMENT=production
+
+COPY . .
+RUN chown -R drive:drive /app
+
+USER drive
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')" || exit 1
+
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WORKERS:-4} --proxy-headers --forwarded-allow-ips='*'"]

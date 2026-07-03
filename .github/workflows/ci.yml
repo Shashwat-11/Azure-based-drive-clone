@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: drive
+          POSTGRES_PASSWORD: drive
+          POSTGRES_DB: drive
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+        ports: [5432:5432]
+      redis:
+        image: redis:7-alpine
+        options: >- 
+          --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+        ports: [6379:6379]
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.13' }
+      - run: pip install ruff pytest pytest-cov -r requirements.txt
+      - run: ruff check app/ tests/
+      - run: python -m pytest tests/ --cov=app --cov-report=term --cov-report=xml -v
+      - uses: actions/upload-artifact@v4
+        with: { name: coverage, path: backend/coverage.xml }
+
+  security-scan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.13' }
+      - run: pip install bandit
+      - run: bandit -r app/ -ll
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f backend/Dockerfile.prod backend/
+      - run: docker build frontend/
