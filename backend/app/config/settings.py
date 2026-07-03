@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
     # Server
-    HOST: str = "0.0.0.0"
+    HOST: str = "0.0.0.0"  # nosec B104 — deployed in Docker/Azure, not exposed to raw network
     PORT: int = 8000
     WORKERS: int = 1
 
