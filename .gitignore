@@ -56,3 +56,10 @@ logs/*.log
 *.pem
 *.key
 credentials.json
+
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl

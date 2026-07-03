@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from app.api.v1._common import get_trace_id, parse_uuid
-
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1._common import get_trace_id, parse_uuid
 from app.dependencies.auth import get_current_user
 from app.dependencies.database import get_db
 from app.dependencies.storage import get_storage_service
@@ -26,8 +25,6 @@ from app.schemas.file import (
 from app.services.file import FileService
 from app.services.folder import FolderService
 from app.services.storage import StorageService
-
-from app.api.v1._common import get_trace_id, parse_uuid
 
 router = APIRouter(prefix="/folders", tags=["Folders"])
 
