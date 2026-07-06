@@ -85,18 +85,62 @@ jobs:
             --resource-group rg-drive-production \
             --query properties.configuration.ingress.fqdn -o tsv)
           APP_URL="https://${FQDN}"
+          TARGET_PORT=$(az containerapp show \
+            --name ca-drive-backend \
+            --resource-group rg-drive-production \
+            --query properties.configuration.ingress.targetPort -o tsv)
           echo "Health check target: ${APP_URL}/api/v1/health"
+          echo "Container App target port: ${TARGET_PORT}"
+          echo ""
 
+          echo "── DNS resolution ──"
+          dig +short "${FQDN}" || nslookup "${FQDN}" || echo "(DNS lookup unavailable)"
+
+          echo ""
+          echo "── Container App Status (pre-flight) ──"
+          az containerapp show \
+            --name ca-drive-backend \
+            --resource-group rg-drive-production \
+            --query "{name:name, provisioningState:properties.provisioningState, fqdn:properties.configuration.ingress.fqdn, targetPort:properties.configuration.ingress.targetPort, latestRevisionName:properties.latestRevisionName}" -o json
+
+          echo ""
+          echo "── Revision Status (pre-flight) ──"
+          az containerapp revision list \
+            --name ca-drive-backend \
+            --resource-group rg-drive-production \
+            --query "[].{name:name, active:properties.active, replicas:properties.replicas, healthState:properties.healthState}" -o table
+
+          echo ""
+          echo "── Recent Container Logs (pre-flight, last 50 lines) ──"
+          az containerapp logs show \
+            --name ca-drive-backend \
+            --resource-group rg-drive-production \
+            --tail 50 || echo "(unable to fetch logs)"
+
+          echo ""
+          echo "── Beginning health check loop ──"
           for i in $(seq 1 12); do
+            echo ""
             echo "Attempt ${i}/12..."
-            RESPONSE=$(curl -s -w '\n%{http_code}' "${APP_URL}/api/v1/health" 2>&1) || true
+
+            CURL_EXIT=0
+            RESPONSE=$(curl -s -w '\n%{http_code}' \
+              --connect-timeout 10 \
+              --max-time 20 \
+              "${APP_URL}/api/v1/health" 2>&1) || CURL_EXIT=$?
+
             HTTP_CODE=$(echo "${RESPONSE}" | tail -n1)
             BODY=$(echo "${RESPONSE}" | sed '$d')
 
+            echo "  curl exit code: ${CURL_EXIT}"
+            if [ "${CURL_EXIT}" != "0" ]; then
+              echo "  curl error (exit ${CURL_EXIT})"
+            fi
             echo "  HTTP status: ${HTTP_CODE}"
             echo "  Response body: ${BODY}"
 
-            if [ "${HTTP_CODE}" = "200" ]; then
+            if [ "${CURL_EXIT}" = "0" ] && [ "${HTTP_CODE}" = "200" ]; then
+              echo ""
               echo "Health check passed."
               exit 0
             fi
@@ -104,27 +148,37 @@ jobs:
             sleep 10
           done
 
+          set +e
+          echo ""
           echo "::error::Health check failed after 12 attempts"
           echo ""
-          echo "── Container App Status ──"
+          echo "── Container App Status (post-mortem) ──"
           az containerapp show \
             --name ca-drive-backend \
             --resource-group rg-drive-production \
-            --query "{name:name, provisioningState:properties.provisioningState, fqdn:properties.configuration.ingress.fqdn, latestRevisionName:properties.latestRevisionName}" -o json
+            --query "{name:name, provisioningState:properties.provisioningState, fqdn:properties.configuration.ingress.fqdn, targetPort:properties.configuration.ingress.targetPort, latestRevisionName:properties.latestRevisionName}" -o json || true
 
           echo ""
-          echo "── Revision Status ──"
+          echo "── Revision Status (post-mortem) ──"
           az containerapp revision list \
             --name ca-drive-backend \
             --resource-group rg-drive-production \
-            --query "[].{name:name, active:properties.active, provisioningState:properties.provisioningState, replicas:properties.replicas, healthState:properties.healthState}" -o table
+            --query "[].{name:name, active:properties.active, provisioningState:properties.provisioningState, replicas:properties.replicas, healthState:properties.healthState}" -o table || true
 
           echo ""
           echo "── Ingress URL ──"
           echo "${APP_URL}/api/v1/health"
 
           echo ""
-          echo "── Last Response ──"
-          echo "HTTP ${HTTP_CODE}: ${BODY}"
+          echo "── Container Logs (post-mortem, last 100 lines) ──"
+          az containerapp logs show \
+            --name ca-drive-backend \
+            --resource-group rg-drive-production \
+            --tail 100 || echo "(unable to fetch logs)"
+
+          echo ""
+          echo "── Last HTTP Response ──"
+          echo "HTTP status: ${HTTP_CODE:-N/A}"
+          echo "Body: ${BODY:-N/A}"
 
           exit 1
