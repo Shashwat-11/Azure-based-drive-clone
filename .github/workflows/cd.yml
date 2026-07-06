@@ -18,15 +18,112 @@ jobs:
       - run: |
           docker build -f backend/Dockerfile.prod -t ${{ secrets.ACR_LOGIN_SERVER }}/drive-backend:${{ github.sha }} backend/
           docker push ${{ secrets.ACR_LOGIN_SERVER }}/drive-backend:${{ github.sha }}
-      - run: |
+      - name: Deploy to Container App
+        id: deploy
+        run: |
           az containerapp update \
             --name ca-drive-backend \
             --resource-group rg-drive-production \
-            --image ${{ secrets.ACR_LOGIN_SERVER }}/drive-backend:${{ github.sha }}
-      - name: Health Check
+            --image ${{ secrets.ACR_LOGIN_SERVER }}/drive-backend:${{ github.sha }} \
+            --query properties.latestRevisionName -o tsv > /tmp/revision_name
+          echo "revision=$(cat /tmp/revision_name)" >> "$GITHUB_OUTPUT"
+      - name: Wait for revision to become active
+        timeout-minutes: 5
         run: |
-          for i in 1 2 3 4 5; do
-            curl -sf "${{ vars.APP_URL }}/api/v1/health" && exit 0
+          REVISION_NAME="${{ steps.deploy.outputs.revision }}"
+          echo "Waiting for Container App provisioning to succeed..."
+          for i in $(seq 1 30); do
+            PROVISIONING=$(az containerapp show \
+              --name ca-drive-backend \
+              --resource-group rg-drive-production \
+              --query properties.provisioningState -o tsv)
+            echo "  [$i/30] provisioningState=${PROVISIONING}"
+            if [ "${PROVISIONING}" = "Succeeded" ]; then
+              break
+            fi
             sleep 10
           done
+
+          if [ "${PROVISIONING}" != "Succeeded" ]; then
+            echo "::error::Container App provisioning did not succeed after 5 minutes"
+            az containerapp show \
+              --name ca-drive-backend \
+              --resource-group rg-drive-production \
+              --query "{name:name, provisioningState:properties.provisioningState, latestRevisionName:properties.latestRevisionName, activeRevisions:properties.latestRevisionFqdn}"
+            exit 1
+          fi
+
+          echo "Waiting for revision ${REVISION_NAME} to become active..."
+          for i in $(seq 1 30); do
+            ACTIVE=$(az containerapp revision list \
+              --name ca-drive-backend \
+              --resource-group rg-drive-production \
+              --query "[?name=='${REVISION_NAME}'].properties.active" -o tsv)
+            echo "  [$i/30] revision=${REVISION_NAME} active=${ACTIVE}"
+            if [ "${ACTIVE}" = "True" ]; then
+              break
+            fi
+            sleep 10
+          done
+
+          if [ "${ACTIVE}" != "True" ]; then
+            echo "::error::Revision ${REVISION_NAME} did not become active after 5 minutes"
+            az containerapp revision list \
+              --name ca-drive-backend \
+              --resource-group rg-drive-production \
+              --query "[].{name:name, active:properties.active, provisioningState:properties.provisioningState, replicas:properties.replicas}" -o table
+            exit 1
+          fi
+
+          echo "Revision ${REVISION_NAME} is active."
+      - name: Health Check
+        timeout-minutes: 3
+        run: |
+          FQDN=$(az containerapp show \
+            --name ca-drive-backend \
+            --resource-group rg-drive-production \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          APP_URL="https://${FQDN}"
+          echo "Health check target: ${APP_URL}/api/v1/health"
+
+          for i in $(seq 1 12); do
+            echo "Attempt ${i}/12..."
+            RESPONSE=$(curl -s -w '\n%{http_code}' "${APP_URL}/api/v1/health" 2>&1) || true
+            HTTP_CODE=$(echo "${RESPONSE}" | tail -n1)
+            BODY=$(echo "${RESPONSE}" | sed '$d')
+
+            echo "  HTTP status: ${HTTP_CODE}"
+            echo "  Response body: ${BODY}"
+
+            if [ "${HTTP_CODE}" = "200" ]; then
+              echo "Health check passed."
+              exit 0
+            fi
+
+            sleep 10
+          done
+
+          echo "::error::Health check failed after 12 attempts"
+          echo ""
+          echo "── Container App Status ──"
+          az containerapp show \
+            --name ca-drive-backend \
+            --resource-group rg-drive-production \
+            --query "{name:name, provisioningState:properties.provisioningState, fqdn:properties.configuration.ingress.fqdn, latestRevisionName:properties.latestRevisionName}" -o json
+
+          echo ""
+          echo "── Revision Status ──"
+          az containerapp revision list \
+            --name ca-drive-backend \
+            --resource-group rg-drive-production \
+            --query "[].{name:name, active:properties.active, provisioningState:properties.provisioningState, replicas:properties.replicas, healthState:properties.healthState}" -o table
+
+          echo ""
+          echo "── Ingress URL ──"
+          echo "${APP_URL}/api/v1/health"
+
+          echo ""
+          echo "── Last Response ──"
+          echo "HTTP ${HTTP_CODE}: ${BODY}"
+
           exit 1
