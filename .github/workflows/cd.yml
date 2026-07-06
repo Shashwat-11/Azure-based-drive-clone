@@ -59,14 +59,15 @@ jobs:
               --name ca-drive-backend \
               --resource-group rg-drive-production \
               --query "[?name=='${REVISION_NAME}'].properties.active" -o tsv)
-            echo "  [$i/30] revision=${REVISION_NAME} active=${ACTIVE}"
-            if [ "${ACTIVE}" = "True" ]; then
+            ACTIVE_TRIMMED=$(echo "${ACTIVE}" | tr -d '[:space:]')
+            echo "  [$i/30] revision=${REVISION_NAME} active='${ACTIVE}' (trimmed='${ACTIVE_TRIMMED}')"
+            if [ "${ACTIVE_TRIMMED}" = "true" ]; then
               break
             fi
             sleep 10
           done
 
-          if [ "${ACTIVE}" != "True" ]; then
+          if [ "${ACTIVE_TRIMMED}" != "true" ]; then
             echo "::error::Revision ${REVISION_NAME} did not become active after 5 minutes"
             az containerapp revision list \
               --name ca-drive-backend \
