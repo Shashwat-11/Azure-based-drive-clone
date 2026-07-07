@@ -5,6 +5,7 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
 
 from app.config.settings import settings
 from app.core.logging_config import get_logger
@@ -31,7 +32,7 @@ def setup_otel() -> None:
     processor = BatchSpanProcessor(exporter)
     _tracer_provider = TracerProvider(
         resource=resource,
-        sampler=trace.sampling.TraceIdRatioBased(settings.OTEL_SAMPLING_RATE),
+        sampler=TraceIdRatioBased(settings.OTEL_SAMPLING_RATE),
     )
     _tracer_provider.add_span_processor(processor)
     trace.set_tracer_provider(_tracer_provider)
