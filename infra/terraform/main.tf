@@ -264,6 +264,10 @@ resource "azurerm_container_app" "backend" {
         name  = "OTEL_ENABLED"
         value = "true"
       }
+      env {
+        name  = "WORKERS"
+        value = "1"
+      }
     }
     min_replicas = var.container_min_replicas
     max_replicas = var.container_max_replicas
