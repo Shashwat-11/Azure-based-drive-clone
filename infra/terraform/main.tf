@@ -281,8 +281,8 @@ resource "azurerm_container_app" "backend" {
         value = "true"
       }
       env {
-        name        = "REDIS_PASSWORD"
-        secret_name = "redis-password"
+        name  = "RATE_LIMIT_ENABLED"
+        value = "false"
       }
       env {
         name  = "AZURE_STORAGE_ACCOUNT_NAME"
@@ -328,10 +328,6 @@ resource "azurerm_container_app" "backend" {
   secret {
     name  = "jwt-secret"
     value = random_password.jwt_secret.result
-  }
-  secret {
-    name  = "redis-password"
-    value = jsondecode(data.azapi_resource_action.redis_list_keys.output).primaryKey
   }
 
   registry {

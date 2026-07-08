@@ -148,9 +148,13 @@ class Settings(BaseSettings):
                 "DB_PASSWORD must be overridden in production"
             )
         if self.RATE_LIMIT_ENABLED and self.REDIS_PASSWORD is None:
-            raise ValueError(
-                "REDIS_PASSWORD must be set in production when rate limiting is enabled"
+            import logging
+            logging.getLogger("drive").warning(
+                "REDIS_PASSWORD is not set — rate limiting disabled. "
+                "Redis-backed features will be unavailable. "
+                "Set REDIS_PASSWORD or configure Entra ID authentication."
             )
+            object.__setattr__(self, "RATE_LIMIT_ENABLED", False)
         return self
 
 
