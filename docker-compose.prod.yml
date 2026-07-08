@@ -16,11 +16,11 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: redis-server --maxmemory-policy volatile-lru
+    command: redis-server --maxmemory-policy volatile-lru --requirepass ${REDIS_PASSWORD:-redispass}
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redispass}", "ping"]
       interval: 5s
       retries: 5
     restart: unless-stopped
@@ -39,7 +39,11 @@ services:
       DB_NAME: ${DB_NAME:-drive}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redispass}
+      RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_REQUESTS: "5"
+      RATE_LIMIT_WINDOW_SECONDS: "60"
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-test-jwt-secret-key-for-local-only}
       AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME}
       AZURE_STORAGE_ACCOUNT_KEY: ${AZURE_STORAGE_ACCOUNT_KEY}
       LOG_LEVEL: INFO

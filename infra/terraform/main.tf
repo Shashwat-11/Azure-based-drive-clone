@@ -241,6 +241,18 @@ resource "azurerm_container_app" "backend" {
         value = azurerm_managed_redis.main.hostname
       }
       env {
+        name  = "REDIS_PORT"
+        value = "6380"
+      }
+      env {
+        name  = "REDIS_SSL"
+        value = "true"
+      }
+      env {
+        name        = "REDIS_PASSWORD"
+        secret_name = "redis-password"
+      }
+      env {
         name  = "AZURE_STORAGE_ACCOUNT_NAME"
         value = azurerm_storage_account.main.name
       }
@@ -284,6 +296,10 @@ resource "azurerm_container_app" "backend" {
   secret {
     name  = "jwt-secret"
     value = random_password.jwt_secret.result
+  }
+  secret {
+    name  = "redis-password"
+    value = azurerm_managed_redis.main.primary_access_key
   }
 
   registry {

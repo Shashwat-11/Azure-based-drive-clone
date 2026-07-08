@@ -1,0 +1,58 @@
+name: Validate Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      resource_group:
+        description: "Azure resource group"
+        required: false
+        default: "rg-drive-production"
+      container_app:
+        description: "Container App name"
+        required: false
+        default: "ca-drive-backend"
+      log_lines:
+        description: "Log lines to fetch on failure"
+        required: false
+        default: "100"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Run deployment validation
+        run: |
+          export RESOURCE_GROUP="${{ inputs.resource_group }}"
+          export CONTAINER_APP="${{ inputs.container_app }}"
+          bash scripts/validate_deployment.sh
+
+      - name: Upload validation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-results
+          path: validation-results/
+          retention-days: 7
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Deployment Validation :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Check | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          for f in validation-results/*.json; do
+            label=$(basename "$f" .json)
+            code=$(tail -n1 "$f" 2>/dev/null || echo "N/A")
+            if [[ "$code" == "200" || "$code" == "201" ]]; then
+              echo "| $label | :white_check_mark: HTTP $code |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "| $label | :x: HTTP $code |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done

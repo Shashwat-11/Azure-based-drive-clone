@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import quote
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy import URL
 
 
 class Settings(BaseSettings):
@@ -34,7 +36,7 @@ class Settings(BaseSettings):
 
     # Database
     DB_HOST: str = "localhost"
-    DB_PORT: int = 5432
+    DB_PORT: int = Field(default=5432, ge=1, le=65535)
     DB_USER: str = "drive"
     DB_PASSWORD: SecretStr = SecretStr("drive")
     DB_NAME: str = "drive"
@@ -45,31 +47,41 @@ class Settings(BaseSettings):
 
     @property
     def DATABASE_URL(self) -> str:  # noqa: N802
-        return (
-            f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD.get_secret_value()}"
-            f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        )
+        return URL.create(
+            "postgresql+asyncpg",
+            username=self.DB_USER,
+            password=self.DB_PASSWORD.get_secret_value(),
+            host=self.DB_HOST,
+            port=self.DB_PORT,
+            database=self.DB_NAME,
+        ).render_as_string(hide_password=False)
 
     @property
     def DATABASE_URL_SYNC(self) -> str:  # noqa: N802
-        return (
-            f"postgresql+psycopg2://{self.DB_USER}:{self.DB_PASSWORD.get_secret_value()}"
-            f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        )
+        return URL.create(
+            "postgresql+psycopg2",
+            username=self.DB_USER,
+            password=self.DB_PASSWORD.get_secret_value(),
+            host=self.DB_HOST,
+            port=self.DB_PORT,
+            database=self.DB_NAME,
+        ).render_as_string(hide_password=False)
 
     # Redis
     REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
+    REDIS_PORT: int = Field(default=6379, ge=1, le=65535)
     REDIS_DB: int = 0
     REDIS_PASSWORD: SecretStr | None = None
+    REDIS_SSL: bool = False
     REDIS_POOL_SIZE: int = Field(default=10, ge=1)
 
     @property
     def REDIS_URL(self) -> str:  # noqa: N802
+        scheme = "rediss" if self.REDIS_SSL else "redis"
         if self.REDIS_PASSWORD:
-            pw = self.REDIS_PASSWORD.get_secret_value()
-            return f"redis://:{pw}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
-        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+            pw = quote(self.REDIS_PASSWORD.get_secret_value(), safe="")
+            return f"{scheme}://:{pw}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        return f"{scheme}://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     # Azure Blob Storage
     AZURE_STORAGE_ACCOUNT_NAME: str | None = None
@@ -122,6 +134,24 @@ class Settings(BaseSettings):
     @classmethod
     def validate_environment(cls, v: str) -> str:
         return v.lower()
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> Settings:
+        if self.ENVIRONMENT != "production":
+            return self
+        if self.JWT_SECRET_KEY.get_secret_value() == "change-me-in-production-use-azure-key-vault":
+            raise ValueError(
+                "JWT_SECRET_KEY must be overridden in production"
+            )
+        if self.DB_PASSWORD.get_secret_value() == "drive":
+            raise ValueError(
+                "DB_PASSWORD must be overridden in production"
+            )
+        if self.RATE_LIMIT_ENABLED and self.REDIS_PASSWORD is None:
+            raise ValueError(
+                "REDIS_PASSWORD must be set in production when rate limiting is enabled"
+            )
+        return self
 
 
 @lru_cache

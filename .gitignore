@@ -63,3 +63,6 @@ credentials.json
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+
+# Deployment validation artifacts
+validation-results/
