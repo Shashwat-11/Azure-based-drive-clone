@@ -4,12 +4,10 @@ from fastapi import APIRouter, Depends
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging_config import get_logger
 from app.dependencies.auth import get_current_user, require_role, security_scheme
 from app.dependencies.database import get_db
-from app.core.logging_config import get_logger
 from app.models.user import UserRole
-
-logger = get_logger(__name__)
 from app.schemas.auth import (
     LoginRequest,
     LogoutRequest,
@@ -20,6 +18,8 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.services.auth import AuthService
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
