@@ -34,6 +34,7 @@ class UserRepository:
     async def create(
         self, email: str, password_hash: str, full_name: str, *, role: UserRole = UserRole.USER
     ) -> User:
+        logger.debug("create_user_enter", email=email)
         role_value = role.value if isinstance(role, UserRole) else role
         user = User(
             email=email.lower().strip(),
@@ -42,7 +43,9 @@ class UserRepository:
             role=role_value,
         )
         self.session.add(user)
+        logger.debug("create_user_flushing")
         await self.session.flush()
+        logger.debug("create_user_flushed", user_id=str(user.id))
         logger.info("user_created", user_id=str(user.id), email=user.email)
         return user
 
@@ -53,13 +56,18 @@ class UserRepository:
         return user
 
     async def exists_by_email(self, email: str) -> bool:
+        logger.debug("exists_by_email_enter", email=email)
+        logger.debug("exists_by_email_executing_query")
         result = await self.session.execute(
             select(User.id).where(
                 User.email == email.lower().strip(),
                 User.is_deleted == False,  # noqa: E712
             )
         )
-        return result.scalar_one_or_none() is not None
+        logger.debug("exists_by_email_query_complete")
+        exists = result.scalar_one_or_none() is not None
+        logger.debug("exists_by_email_result", exists=exists)
+        return exists
 
 
 class RefreshTokenRepository:

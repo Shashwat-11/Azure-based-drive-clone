@@ -22,22 +22,32 @@ class AuthService:
         self.token_repo = RefreshTokenRepository(session)
 
     async def register(self, request: RegisterRequest) -> UserResponse:
+        logger.debug("register_enter", email=request.email)
+        logger.debug("register_checking_existing_user")
         existing = await self.user_repo.exists_by_email(request.email)
         if existing:
+            logger.debug("register_user_already_exists", email=request.email)
             raise ConflictError("A user with this email already exists")
+        logger.debug("register_user_not_found", email=request.email)
 
+        logger.debug("register_hashing_password")
         password_hash_value = hash_password(request.password)
+        logger.debug("register_password_hashed")
+
+        logger.debug("register_creating_user")
         user = await self.user_repo.create(
             email=request.email,
             password_hash=password_hash_value,
             full_name=request.full_name,
         )
+        logger.debug("register_user_created", user_id=str(user.id))
 
         logger.info(
             "user_registered",
             user_id=str(user.id),
             email=user.email,
         )
+        logger.debug("register_returning_response")
         return UserResponse.model_validate(user)
 
     async def login(self, request: LoginRequest) -> TokenResponse:

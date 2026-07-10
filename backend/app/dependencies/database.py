@@ -21,6 +21,7 @@ _session_factory: async_sessionmaker[AsyncSession] | None = None
 def get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
+        logger.debug("get_engine_creating", host=settings.DB_HOST, port=settings.DB_PORT)
         _engine = create_async_engine(
             settings.DATABASE_URL,
             pool_size=settings.DB_POOL_SIZE,
@@ -28,6 +29,7 @@ def get_engine() -> AsyncEngine:
             pool_timeout=settings.DB_POOL_TIMEOUT,
             echo=settings.DB_ECHO,
             pool_pre_ping=True,
+            connect_args={"timeout": 10, "command_timeout": 30},
         )
         logger.info(
             "database_engine_created",
@@ -49,13 +51,22 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:
+    logger.debug("get_db_enter")
     factory = get_session_factory()
+    logger.debug("get_db_session_factory_obtained")
     async with factory() as session:
         try:
+            t0 = __import__("time").monotonic()
+            logger.debug("get_db_yielding_session")
             yield session
+            dt = round((__import__("time").monotonic() - t0) * 1000)
+            logger.debug("get_db_session_returned", duration_ms=dt)
             if session.is_modified:
+                logger.debug("get_db_committing")
                 await session.commit()
+                logger.debug("get_db_committed")
         except Exception:
+            logger.debug("get_db_rolling_back")
             await session.rollback()
             raise
 
