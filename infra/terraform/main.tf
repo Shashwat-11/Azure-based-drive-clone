@@ -36,6 +36,11 @@ variable "container_image" {
   description = "Container image to deploy. Overridden by GitHub Actions CD pipeline at runtime."
 }
 
+variable "frontend_container_image" {
+  default     = "crdriveproduction.azurecr.io/drive-frontend:latest"
+  description = "Frontend container image. Overridden by GitHub Actions CD pipeline at runtime."
+}
+
 # ── Foundation ──────────────────────────────────────────
 
 resource "azurerm_resource_group" "main" {
@@ -337,6 +342,59 @@ resource "azurerm_container_app" "backend" {
   }
 }
 
+# ── Frontend Container App ──────────────────────────────
+
+resource "azurerm_container_app" "frontend" {
+  name                         = "ca-${var.app_name}-frontend"
+  container_app_environment_id = azurerm_container_app_environment.main.id
+  resource_group_name          = azurerm_resource_group.main.name
+  revision_mode                = "Single"
+
+  lifecycle {
+    ignore_changes = [template[0].container[0].image]
+  }
+
+  template {
+    container {
+      name   = "frontend"
+      image  = var.frontend_container_image
+      cpu    = var.container_cpu
+      memory = var.container_memory
+      env {
+        name  = "NODE_ENV"
+        value = "production"
+      }
+      env {
+        name  = "NEXT_PUBLIC_API_URL"
+        value = "https://${azurerm_container_app.backend.ingress[0].fqdn}"
+      }
+    }
+    min_replicas = var.container_min_replicas
+    max_replicas = var.container_max_replicas
+  }
+
+  registry {
+    server               = azurerm_container_registry.main.login_server
+    username             = azurerm_container_registry.main.admin_username
+    password_secret_name = "acr-password"
+  }
+
+  secret {
+    name  = "acr-password"
+    value = azurerm_container_registry.main.admin_password
+  }
+
+  ingress {
+    external_enabled = true
+    target_port      = 3000
+
+    traffic_weight {
+      percentage      = 100
+      latest_revision = true
+    }
+  }
+}
+
 # ── Alerts ──────────────────────────────────────────────
 
 resource "azurerm_monitor_action_group" "oncall" {
@@ -413,6 +471,14 @@ output "acr_admin_password" {
 
 output "container_app_fqdn" {
   value = azurerm_container_app.backend.ingress[0].fqdn
+}
+
+output "frontend_fqdn" {
+  value = azurerm_container_app.frontend.ingress[0].fqdn
+}
+
+output "frontend_url" {
+  value = "https://${azurerm_container_app.frontend.ingress[0].fqdn}"
 }
 
 output "key_vault_uri" {
