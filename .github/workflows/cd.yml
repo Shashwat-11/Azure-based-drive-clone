@@ -62,7 +62,15 @@ jobs:
       - uses: azure/docker-login@v2
         with: { login-server: '${{ secrets.ACR_LOGIN_SERVER }}', username: '${{ secrets.ACR_USERNAME }}', password: '${{ secrets.ACR_PASSWORD }}' }
       - run: |
-          docker build -f frontend/Dockerfile -t ${{ secrets.ACR_LOGIN_SERVER }}/drive-frontend:${{ github.sha }} frontend/
+          BACKEND_FQDN=$(az containerapp show \
+            --name ca-drive-backend \
+            --resource-group rg-drive-production \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL="https://${BACKEND_FQDN}" \
+            -f frontend/Dockerfile \
+            -t ${{ secrets.ACR_LOGIN_SERVER }}/drive-frontend:${{ github.sha }} \
+            frontend/
           docker push ${{ secrets.ACR_LOGIN_SERVER }}/drive-frontend:${{ github.sha }}
       - name: Deploy to Container App
         id: deploy

@@ -1,5 +1,5 @@
 export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+  process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 export const TOKEN_KEY = "drive_access_token";
 export const REFRESH_TOKEN_KEY = "drive_refresh_token";
