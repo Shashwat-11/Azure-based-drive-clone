@@ -10,6 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.exceptions import AppError
 from app.core.logging_config import get_logger
+from app.config.settings import settings
 
 logger = get_logger(__name__)
 
@@ -120,5 +121,23 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         status_code=500,
         message="An unexpected error occurred",
         code="INTERNAL_ERROR",
+        trace_id=trace_id,
+    )
+
+
+async def multipart_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    trace_id = getattr(request.state, "trace_id", None)
+    max_mb = settings.MAX_UPLOAD_SIZE_MB
+    logger.warning(
+        "upload_too_large",
+        max_size_mb=max_mb,
+        path=request.url.path,
+        method=request.method,
+        trace_id=trace_id,
+    )
+    return _build_error_response(
+        status_code=413,
+        message=f"File exceeds maximum allowed size of {max_mb} MB",
+        code="PAYLOAD_TOO_LARGE",
         trace_id=trace_id,
     )

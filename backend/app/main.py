@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import PlainTextResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.formparsers import MultiPartException
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.v1 import router as v1_router
@@ -14,6 +15,7 @@ from app.config.settings import settings
 from app.core.error_handlers import (
     app_error_handler,
     http_exception_handler,
+    multipart_exception_handler,
     unhandled_exception_handler,
     validation_exception_handler,
 )
@@ -29,23 +31,9 @@ from app.middleware.request_logger import RequestLoggerMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.timeout import RequestTimeoutMiddleware
 
-# Override Starlette's default 1MB multipart part size limit.
-# Starlette's Request.form() passes max_part_size=1MB explicitly to
-# _get_form(), so we must override it at the _get_form level.
-# Match the application's MAX_UPLOAD_SIZE_MB setting.
-from starlette.requests import Request as _StarletteRequest
+from app.compat.starlette_multipart import apply_upload_limit_patch
 
-_original_get_form = _StarletteRequest._get_form
-
-async def _patched_get_form(self, *,
-                             max_files=1000, max_fields=1000,
-                             max_part_size=None, **kwargs):
-    return await _original_get_form(
-        self, max_files=max_files, max_fields=max_fields,
-        max_part_size=settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
-        **kwargs)
-
-_StarletteRequest._get_form = _patched_get_form
+apply_upload_limit_patch()
 
 logger = get_logger(__name__)
 
@@ -107,6 +95,7 @@ def _register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AppError, app_error_handler)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(MultiPartException, multipart_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
 
 
