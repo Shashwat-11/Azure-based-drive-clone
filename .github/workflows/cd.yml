@@ -6,9 +6,12 @@ on:
     tags: ['v*']
 
 jobs:
-  deploy:
+  backend:
     runs-on: ubuntu-latest
     environment: production
+    outputs:
+      revision: ${{ steps.deploy.outputs.revision }}
+      fqdn: ${{ steps.health.outputs.fqdn }}
     steps:
       - uses: actions/checkout@v4
       - uses: azure/login@v2
@@ -27,57 +30,13 @@ jobs:
             --image ${{ secrets.ACR_LOGIN_SERVER }}/drive-backend:${{ github.sha }} \
             --query properties.latestRevisionName -o tsv > /tmp/revision_name
           echo "revision=$(cat /tmp/revision_name)" >> "$GITHUB_OUTPUT"
-      - name: Wait for revision to become active
+      - name: Wait for revision
         timeout-minutes: 5
         run: |
           REVISION_NAME="${{ steps.deploy.outputs.revision }}"
-          echo "Waiting for Container App provisioning to succeed..."
-          for i in $(seq 1 30); do
-            PROVISIONING=$(az containerapp show \
-              --name ca-drive-backend \
-              --resource-group rg-drive-production \
-              --query properties.provisioningState -o tsv)
-            echo "  [$i/30] provisioningState=${PROVISIONING}"
-            if [ "${PROVISIONING}" = "Succeeded" ]; then
-              break
-            fi
-            sleep 10
-          done
-
-          if [ "${PROVISIONING}" != "Succeeded" ]; then
-            echo "::error::Container App provisioning did not succeed after 5 minutes"
-            az containerapp show \
-              --name ca-drive-backend \
-              --resource-group rg-drive-production \
-              --query "{name:name, provisioningState:properties.provisioningState, latestRevisionName:properties.latestRevisionName, activeRevisions:properties.latestRevisionFqdn}"
-            exit 1
-          fi
-
-          echo "Waiting for revision ${REVISION_NAME} to become active..."
-          for i in $(seq 1 30); do
-            ACTIVE=$(az containerapp revision list \
-              --name ca-drive-backend \
-              --resource-group rg-drive-production \
-              --query "[?name=='${REVISION_NAME}'].properties.active" -o tsv)
-            ACTIVE_TRIMMED=$(echo "${ACTIVE}" | tr -d '[:space:]')
-            echo "  [$i/30] revision=${REVISION_NAME} active='${ACTIVE}' (trimmed='${ACTIVE_TRIMMED}')"
-            if [ "${ACTIVE_TRIMMED}" = "true" ]; then
-              break
-            fi
-            sleep 10
-          done
-
-          if [ "${ACTIVE_TRIMMED}" != "true" ]; then
-            echo "::error::Revision ${REVISION_NAME} did not become active after 5 minutes"
-            az containerapp revision list \
-              --name ca-drive-backend \
-              --resource-group rg-drive-production \
-              --query "[].{name:name, active:properties.active, provisioningState:properties.provisioningState, replicas:properties.replicas}" -o table
-            exit 1
-          fi
-
-          echo "Revision ${REVISION_NAME} is active."
+          bash scripts/wait-for-revision.sh ca-drive-backend "$REVISION_NAME"
       - name: Health Check
+        id: health
         timeout-minutes: 3
         run: |
           FQDN=$(az containerapp show \
@@ -85,100 +44,76 @@ jobs:
             --resource-group rg-drive-production \
             --query properties.configuration.ingress.fqdn -o tsv)
           APP_URL="https://${FQDN}"
-          TARGET_PORT=$(az containerapp show \
-            --name ca-drive-backend \
-            --resource-group rg-drive-production \
-            --query properties.configuration.ingress.targetPort -o tsv)
           echo "Health check target: ${APP_URL}/api/v1/health"
-          echo "Container App target port: ${TARGET_PORT}"
-          echo ""
+          echo "fqdn=${FQDN}" >> "$GITHUB_OUTPUT"
+          bash scripts/health-check.sh "${APP_URL}/api/v1/health" ca-drive-backend
 
-          echo "── DNS resolution ──"
-          dig +short "${FQDN}" || nslookup "${FQDN}" || echo "(DNS lookup unavailable)"
-
-          echo ""
-          echo "── Container App Status (pre-flight) ──"
-          az containerapp show \
-            --name ca-drive-backend \
+  frontend:
+    needs: backend
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      revision: ${{ steps.deploy.outputs.revision }}
+      fqdn: ${{ steps.health.outputs.fqdn }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with: { creds: '${{ secrets.AZURE_CREDENTIALS }}' }
+      - uses: azure/docker-login@v2
+        with: { login-server: '${{ secrets.ACR_LOGIN_SERVER }}', username: '${{ secrets.ACR_USERNAME }}', password: '${{ secrets.ACR_PASSWORD }}' }
+      - run: |
+          docker build -f frontend/Dockerfile -t ${{ secrets.ACR_LOGIN_SERVER }}/drive-frontend:${{ github.sha }} frontend/
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/drive-frontend:${{ github.sha }}
+      - name: Deploy to Container App
+        id: deploy
+        run: |
+          az containerapp update \
+            --name ca-drive-frontend \
             --resource-group rg-drive-production \
-            --query "{name:name, provisioningState:properties.provisioningState, fqdn:properties.configuration.ingress.fqdn, targetPort:properties.configuration.ingress.targetPort, latestRevisionName:properties.latestRevisionName}" -o json
-
-          echo ""
-          echo "── Revision Status (pre-flight) ──"
-          az containerapp revision list \
-            --name ca-drive-backend \
+            --image ${{ secrets.ACR_LOGIN_SERVER }}/drive-frontend:${{ github.sha }} \
+            --query properties.latestRevisionName -o tsv > /tmp/revision_name
+          echo "revision=$(cat /tmp/revision_name)" >> "$GITHUB_OUTPUT"
+      - name: Wait for revision
+        timeout-minutes: 5
+        run: |
+          REVISION_NAME="${{ steps.deploy.outputs.revision }}"
+          bash scripts/wait-for-revision.sh ca-drive-frontend "$REVISION_NAME"
+      - name: Health Check
+        id: health
+        timeout-minutes: 3
+        run: |
+          FQDN=$(az containerapp show \
+            --name ca-drive-frontend \
             --resource-group rg-drive-production \
-            --query "[].{name:name, active:properties.active, replicas:properties.replicas, healthState:properties.healthState}" -o table
+            --query properties.configuration.ingress.fqdn -o tsv)
+          APP_URL="https://${FQDN}"
+          echo "Health check target: ${APP_URL}/"
+          echo "fqdn=${FQDN}" >> "$GITHUB_OUTPUT"
+          bash scripts/health-check.sh "${APP_URL}/" ca-drive-frontend
 
+  summary:
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: azure/login@v2
+        with: { creds: '${{ secrets.AZURE_CREDENTIALS }}' }
+      - name: Deployment summary
+        run: |
+          echo "═══════════════════════════════════════════════════════"
+          echo "  Deployment Summary"
+          echo "═══════════════════════════════════════════════════════"
           echo ""
-          echo "── Recent Container Logs (pre-flight, last 50 lines) ──"
-          az containerapp logs show \
-            --name ca-drive-backend \
-            --resource-group rg-drive-production \
-            --tail 50 || echo "(unable to fetch logs)"
-
+          echo "  Backend"
+          echo "  ───────"
+          echo "  Revision:  ${{ needs.backend.outputs.revision }}"
+          echo "  URL:       https://${{ needs.backend.outputs.fqdn }}"
+          echo "  Health:    https://${{ needs.backend.outputs.fqdn }}/api/v1/health"
           echo ""
-          echo "── Beginning health check loop ──"
-          for i in $(seq 1 12); do
-            echo ""
-            echo "Attempt ${i}/12..."
-
-            CURL_EXIT=0
-            RESPONSE=$(curl -s -w '\n%{http_code}' \
-              --connect-timeout 10 \
-              --max-time 20 \
-              "${APP_URL}/api/v1/health" 2>&1) || CURL_EXIT=$?
-
-            HTTP_CODE=$(echo "${RESPONSE}" | tail -n1)
-            BODY=$(echo "${RESPONSE}" | sed '$d')
-
-            echo "  curl exit code: ${CURL_EXIT}"
-            if [ "${CURL_EXIT}" != "0" ]; then
-              echo "  curl error (exit ${CURL_EXIT})"
-            fi
-            echo "  HTTP status: ${HTTP_CODE}"
-            echo "  Response body: ${BODY}"
-
-            if [ "${CURL_EXIT}" = "0" ] && [ "${HTTP_CODE}" = "200" ]; then
-              echo ""
-              echo "Health check passed."
-              exit 0
-            fi
-
-            sleep 10
-          done
-
-          set +e
+          echo "  Frontend"
+          echo "  ────────"
+          echo "  Revision:  ${{ needs.frontend.outputs.revision }}"
+          echo "  URL:       https://${{ needs.frontend.outputs.fqdn }}"
           echo ""
-          echo "::error::Health check failed after 12 attempts"
-          echo ""
-          echo "── Container App Status (post-mortem) ──"
-          az containerapp show \
-            --name ca-drive-backend \
-            --resource-group rg-drive-production \
-            --query "{name:name, provisioningState:properties.provisioningState, fqdn:properties.configuration.ingress.fqdn, targetPort:properties.configuration.ingress.targetPort, latestRevisionName:properties.latestRevisionName}" -o json || true
-
-          echo ""
-          echo "── Revision Status (post-mortem) ──"
-          az containerapp revision list \
-            --name ca-drive-backend \
-            --resource-group rg-drive-production \
-            --query "[].{name:name, active:properties.active, provisioningState:properties.provisioningState, replicas:properties.replicas, healthState:properties.healthState}" -o table || true
-
-          echo ""
-          echo "── Ingress URL ──"
-          echo "${APP_URL}/api/v1/health"
-
-          echo ""
-          echo "── Container Logs (post-mortem, last 100 lines) ──"
-          az containerapp logs show \
-            --name ca-drive-backend \
-            --resource-group rg-drive-production \
-            --tail 100 || echo "(unable to fetch logs)"
-
-          echo ""
-          echo "── Last HTTP Response ──"
-          echo "HTTP status: ${HTTP_CODE:-N/A}"
-          echo "Body: ${BODY:-N/A}"
-
-          exit 1
+          echo "  Image tag: ${{ github.sha }}"
+          echo "═══════════════════════════════════════════════════════"
