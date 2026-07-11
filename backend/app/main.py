@@ -29,6 +29,24 @@ from app.middleware.request_logger import RequestLoggerMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.timeout import RequestTimeoutMiddleware
 
+# Override Starlette's default 1MB multipart part size limit.
+# Starlette's Request.form() passes max_part_size=1MB explicitly to
+# _get_form(), so we must override it at the _get_form level.
+# Match the application's MAX_UPLOAD_SIZE_MB setting.
+from starlette.requests import Request as _StarletteRequest
+
+_original_get_form = _StarletteRequest._get_form
+
+async def _patched_get_form(self, *,
+                             max_files=1000, max_fields=1000,
+                             max_part_size=None, **kwargs):
+    return await _original_get_form(
+        self, max_files=max_files, max_fields=max_fields,
+        max_part_size=settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
+        **kwargs)
+
+_StarletteRequest._get_form = _patched_get_form
+
 logger = get_logger(__name__)
 
 
