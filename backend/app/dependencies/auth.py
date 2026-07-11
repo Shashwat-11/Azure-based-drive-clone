@@ -22,9 +22,8 @@ async def get_current_user(
     request: Request = None,  # noqa: B008
 ) -> UserResponse:
     logger.debug(
-        "get_current_user_started",
+        "get_current_user_enter",
         has_credentials=credentials is not None,
-        scheme=credentials.scheme if credentials else "none",
     )
 
     if credentials is None:
@@ -32,9 +31,7 @@ async def get_current_user(
         raise AuthenticationError("Authentication required")
 
     if credentials.scheme.lower() != "bearer":
-        logger.debug(
-            "get_current_user_wrong_scheme", scheme=credentials.scheme,
-        )
+        logger.debug("get_current_user_wrong_scheme", scheme=credentials.scheme)
         raise AuthenticationError("Invalid authentication scheme")
 
     raw_token = credentials.credentials
@@ -42,25 +39,26 @@ async def get_current_user(
         logger.debug("get_current_user_stripping_bearer_prefix")
         raw_token = raw_token[7:]
 
+    logger.debug("get_current_user_decoding_token")
     payload = decode_token(raw_token)
+    logger.debug("get_current_user_token_decoded", sub=payload.get("sub"))
 
     jti = payload.get("jti")
     if jti:
+        logger.debug("get_current_user_checking_blacklist", jti=jti[:8] + "...")
         is_blacklisted = await is_token_blacklisted(jti)
+        logger.debug("get_current_user_blacklist_checked", jti=jti[:8] + "...", blacklisted=is_blacklisted)
         if is_blacklisted:
             logger.debug("get_current_user_blacklisted", jti=jti)
             raise AuthenticationError("Token has been revoked")
 
     from app.services.auth import AuthService
 
+    logger.debug("get_current_user_looking_up_user")
     auth_service = AuthService(db)
     try:
         user = await auth_service.get_current_user(raw_token)
-        logger.debug(
-            "get_current_user_success",
-            user_id=str(user.id),
-            role=user.role,
-        )
+        logger.debug("get_current_user_success", user_id=str(user.id), role=user.role)
         return user
     except AuthenticationError:
         raise

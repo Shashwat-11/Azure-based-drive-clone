@@ -98,13 +98,22 @@ def extract_user_id_from_token(token: str) -> uuid.UUID:
 
 
 async def is_token_blacklisted(jti: str) -> bool:
+    logger.debug("is_token_blacklisted_enter", jti=jti[:8] + "...")
     try:
         from app.dependencies.redis import get_redis
+
+        logger.debug("is_token_blacklisted_getting_redis_client", jti=jti[:8] + "...")
         redis_client = await get_redis()
+        logger.debug("is_token_blacklisted_redis_client_obtained", jti=jti[:8] + "...")
+
+        logger.debug("is_token_blacklisted_querying_redis", jti=jti[:8] + "...")
         result = await redis_client.exists(f"jti_blacklist:{jti}")
+        logger.debug("is_token_blacklisted_redis_query_complete", jti=jti[:8] + "...", result=result)
+
         is_blacklisted = result > 0
         if is_blacklisted:
             logger.debug("token_blacklist_hit", jti=jti)
+        logger.debug("is_token_blacklisted_exit", jti=jti[:8] + "...", blacklisted=is_blacklisted)
         return is_blacklisted
     except Exception as exc:
         logger.debug("token_blacklist_redis_unavailable", error=str(exc))

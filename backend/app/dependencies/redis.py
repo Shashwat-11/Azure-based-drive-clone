@@ -15,16 +15,20 @@ _redis_client: aioredis.Redis | None = None
 async def get_redis() -> aioredis.Redis:
     global _redis_client
     if _redis_client is None:
+        logger.debug("get_redis_creating_client", host=settings.REDIS_HOST, port=settings.REDIS_PORT)
         _redis_client = aioredis.from_url(
             settings.REDIS_URL,
             max_connections=settings.REDIS_POOL_SIZE,
             decode_responses=True,
+            socket_connect_timeout=5,
+            socket_keepalive=True,
         )
         logger.info(
-            "redis_connection_established",
+            "redis_client_created_lazy_connection",
             host=settings.REDIS_HOST,
             port=settings.REDIS_PORT,
             db=settings.REDIS_DB,
+            url_scheme=settings.REDIS_URL.split("://")[0] if "://" in settings.REDIS_URL else "unknown",
         )
     return _redis_client
 
