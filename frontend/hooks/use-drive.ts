@@ -49,21 +49,15 @@ export function useDriveMutations(folderId: string | null) {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ["folders"] });
-    queryClient.invalidateQueries({ queryKey: ["files"] });
-    queryClient.invalidateQueries({ queryKey: ["search"] });
-    queryClient.invalidateQueries({ queryKey: ["recent"] });
-    queryClient.invalidateQueries({ queryKey: ["shared"] });
-    queryClient.invalidateQueries({ queryKey: ["trash"] });
-    if (folderId) queryClient.invalidateQueries({ queryKey: queryKeys.breadcrumbs(folderId) });
-  };
+  const queryKeyFiles   = queryKeys.files(folderId);
+  const queryKeyFolders = queryKeys.folders(folderId);
 
   const createFolder = useMutation({
     mutationFn: (name: string) => folderService.create(name, folderId),
     onSuccess: () => {
       addToast("Folder created", "success");
-      invalidate();
+      queryClient.invalidateQueries({ queryKey: queryKeyFolders });
+      if (folderId) queryClient.invalidateQueries({ queryKey: queryKeys.breadcrumbs(folderId) });
     },
     onError: () => addToast("Failed to create folder", "error"),
   });
@@ -72,7 +66,8 @@ export function useDriveMutations(folderId: string | null) {
     mutationFn: (fileId: string) => fileService.delete(fileId),
     onSuccess: () => {
       addToast("File moved to trash", "success");
-      invalidate();
+      queryClient.invalidateQueries({ queryKey: queryKeyFiles });
+      queryClient.invalidateQueries({ queryKey: queryKeys.trash });
     },
     onError: () => addToast("Failed to delete file", "error"),
   });
@@ -81,7 +76,8 @@ export function useDriveMutations(folderId: string | null) {
     mutationFn: (id: string) => folderService.delete(id),
     onSuccess: () => {
       addToast("Folder moved to trash", "success");
-      invalidate();
+      queryClient.invalidateQueries({ queryKey: queryKeyFolders });
+      queryClient.invalidateQueries({ queryKey: queryKeys.trash });
     },
     onError: () => addToast("Failed to delete folder", "error"),
   });
@@ -91,7 +87,8 @@ export function useDriveMutations(folderId: string | null) {
       fileService.rename(id, name),
     onSuccess: () => {
       addToast("Renamed", "success");
-      invalidate();
+      queryClient.invalidateQueries({ queryKey: queryKeyFiles });
+      if (folderId) queryClient.invalidateQueries({ queryKey: queryKeys.breadcrumbs(folderId) });
     },
     onError: () => addToast("Failed to rename", "error"),
   });
@@ -101,7 +98,8 @@ export function useDriveMutations(folderId: string | null) {
       folderService.rename(id, name),
     onSuccess: () => {
       addToast("Renamed", "success");
-      invalidate();
+      queryClient.invalidateQueries({ queryKey: queryKeyFolders });
+      if (folderId) queryClient.invalidateQueries({ queryKey: queryKeys.breadcrumbs(folderId) });
     },
     onError: () => addToast("Failed to rename", "error"),
   });

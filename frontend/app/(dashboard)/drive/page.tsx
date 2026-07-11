@@ -43,7 +43,7 @@ export default function DrivePage() {
   const handleCreateFolder = () => {
     if (!newFolderName.trim()) return;
     createFolder.mutate(newFolderName.trim(), {
-      onSuccess: () => {
+      onSettled: () => {
         setShowNewFolder(false);
         setNewFolderName("");
       },
@@ -52,12 +52,17 @@ export default function DrivePage() {
 
   const handleRename = () => {
     if (!renaming || !renameValue.trim()) return;
-    const mutation =
-      renaming.type === "file"
-        ? () => renameFile.mutate({ id: renaming.id, name: renameValue.trim() })
-        : () => renameFolder.mutate({ id: renaming.id, name: renameValue.trim() });
-    mutation();
-    setRenaming(null);
+    if (renaming.type === "file") {
+      renameFile.mutate(
+        { id: renaming.id, name: renameValue.trim() },
+        { onSettled: () => setRenaming(null) }
+      );
+    } else {
+      renameFolder.mutate(
+        { id: renaming.id, name: renameValue.trim() },
+        { onSettled: () => setRenaming(null) }
+      );
+    }
   };
 
   const handleDownload = async (file: FileItem) => {
@@ -189,7 +194,9 @@ export default function DrivePage() {
           />
           <div className="flex justify-end gap-2">
             <Button variant="secondary" size="sm" onClick={() => setShowNewFolder(false)}>Cancel</Button>
-            <Button size="sm" onClick={handleCreateFolder}>Create</Button>
+            <Button size="sm" onClick={handleCreateFolder} isLoading={createFolder.isPending}>
+              {createFolder.isPending ? "Creating..." : "Create"}
+            </Button>
           </div>
         </div>
       </Modal>
@@ -205,7 +212,13 @@ export default function DrivePage() {
           />
           <div className="flex justify-end gap-2">
             <Button variant="secondary" size="sm" onClick={() => setRenaming(null)}>Cancel</Button>
-            <Button size="sm" onClick={handleRename}>Rename</Button>
+            <Button
+              size="sm"
+              onClick={handleRename}
+              isLoading={renameFile.isPending || renameFolder.isPending}
+            >
+              Rename
+            </Button>
           </div>
         </div>
       </Modal>

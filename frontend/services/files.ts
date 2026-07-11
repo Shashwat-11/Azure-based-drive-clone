@@ -1,3 +1,4 @@
+import { AxiosProgressEvent } from "axios";
 import api from "./api";
 import {
   FileItem,
@@ -26,12 +27,21 @@ export const fileService = {
     return data;
   },
 
-  async upload(file: File, folderId?: string | null): Promise<FileItem> {
+  async upload(
+    file: File,
+    folderId?: string | null,
+    onProgress?: (pct: number) => void
+  ): Promise<FileItem> {
     const form = new FormData();
     form.append("file", file);
     const params = folderId ? `?folder_id=${folderId}` : "";
     const { data } = await api.post<FileItem>(`/files/upload${params}`, form, {
       headers: { "Content-Type": "multipart/form-data" },
+      onUploadProgress: (e: AxiosProgressEvent) => {
+        if (e.total && onProgress) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      },
     });
     return data;
   },

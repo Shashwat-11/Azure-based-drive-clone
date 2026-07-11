@@ -22,7 +22,12 @@ export default function SharedPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-xl font-semibold text-slate-100 mb-6">Shared with me</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold text-slate-100">Shared with me</h1>
+        <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">
+          Share UI coming soon
+        </span>
+      </div>
       {isError ? (
         <div className="flex flex-col items-center py-20">
           <p className="text-slate-400 mb-4">Failed to load shared files</p>
