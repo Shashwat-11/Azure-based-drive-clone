@@ -243,6 +243,13 @@ resource "azurerm_container_app" "backend" {
         value = var.environment
       }
       env {
+        name = "CORS_ORIGINS"
+        value = jsonencode([
+          "http://localhost:3000",
+          "https://ca-${var.app_name}-frontend.${azurerm_container_app_environment.main.default_domain}",
+        ])
+      }
+      env {
         name  = "DB_HOST"
         value = azurerm_postgresql_flexible_server.main.fqdn
       }
