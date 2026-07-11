@@ -125,11 +125,13 @@ resource "azurerm_postgresql_flexible_server_database" "main" {
 
 # Allow the Container App Environment's outbound IP to reach PostgreSQL.
 # PostgreSQL Flexible Server with zero firewall rules defaults to "deny all".
+# The environment static_ip is the INBOUND address, not the outbound SNAT IP.
+# The Container App's outbound_ip_addresses are the correct egress source IPs.
 resource "azurerm_postgresql_flexible_server_firewall_rule" "container_app" {
-  name             = "allow-cae-drive-production"
+  name             = "allow-container-app-egress"
   server_id        = azurerm_postgresql_flexible_server.main.id
-  start_ip_address = azurerm_container_app_environment.main.static_ip_address
-  end_ip_address   = azurerm_container_app_environment.main.static_ip_address
+  start_ip_address = azurerm_container_app.backend.outbound_ip_addresses[0]
+  end_ip_address   = azurerm_container_app.backend.outbound_ip_addresses[0]
 }
 
 # ── Key Vault Secrets ───────────────────────────────────
