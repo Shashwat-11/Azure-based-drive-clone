@@ -13,7 +13,12 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# ConfigParser interprets % as interpolation syntax. URL-encoded
+# passwords contain %XX sequences that break ConfigParser.set().
+config.set_main_option(
+    "sqlalchemy.url",
+    settings.DATABASE_URL.replace("%", "%%"),
+)
 
 target_metadata = Base.metadata
 
