@@ -1,10 +1,22 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useAuth } from "@/contexts/auth-context";
+
 export default function Home() {
+  const router = useRouter();
+  const { isAuthenticated, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading) {
+      router.replace(isAuthenticated ? "/drive" : "/login");
+    }
+  }, [isAuthenticated, isLoading, router]);
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-900 text-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold">Drive</h1>
-        <p className="mt-4 text-lg text-gray-400">Cloud Storage Platform</p>
-      </div>
-    </main>
+    <div className="flex h-screen items-center justify-center bg-slate-950">
+      <div className="w-6 h-6 border-2 border-slate-600 border-t-blue-500 rounded-full animate-spin" />
+    </div>
   );
 }
