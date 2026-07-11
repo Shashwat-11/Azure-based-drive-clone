@@ -7,6 +7,7 @@ from fastapi import File as FastAPIFile
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1._common import get_trace_id, parse_uuid
 from app.dependencies.auth import get_current_user
 from app.dependencies.database import get_db
 from app.dependencies.storage import get_storage_service
@@ -26,16 +27,6 @@ from app.services.storage import StorageService
 router = APIRouter(prefix="/files", tags=["Files"])
 
 
-def _get_trace_id(request: Request) -> str:
-    return getattr(request.state, "trace_id", "")
-
-
-def _parse_uuid(val: str | None) -> uuid_mod.UUID | None:
-    if val:
-        return uuid_mod.UUID(val)
-    return None
-
-
 @router.post("/upload", response_model=FileUploadResponse, status_code=201)
 async def upload_file(
     file: UploadFile = FastAPIFile(...),  # noqa: B008
@@ -45,8 +36,8 @@ async def upload_file(
     storage: StorageService = Depends(get_storage_service),  # noqa: B008
     request: Request = None,  # noqa: B008
 ) -> FileUploadResponse:
-    folder_uuid = _parse_uuid(folder_id)
-    trace_id = _get_trace_id(request) if request else ""
+    folder_uuid = parse_uuid(folder_id)
+    trace_id = get_trace_id(request) if request else ""
     service = FileService(db, storage_service=storage)
     return await service.upload(file, current_user.id, folder_id=folder_uuid, trace_id=trace_id)
 
@@ -61,7 +52,7 @@ async def list_files(
 ) -> FileListResponse:
     service = FileService(db)
     files, total = await service.list_files(
-        current_user.id, folder_id=_parse_uuid(folder_id), offset=offset, limit=limit
+        current_user.id, folder_id=parse_uuid(folder_id), offset=offset, limit=limit
     )
     return FileListResponse(files=files, total=total, offset=offset, limit=limit)
 
@@ -84,7 +75,7 @@ async def download_file(
     request: Request = None,  # noqa: B008
     if_none_match: str | None = Header(None, alias="If-None-Match"),
 ):
-    trace_id = _get_trace_id(request) if request else ""
+    trace_id = get_trace_id(request) if request else ""
     service = FileService(db, storage_service=storage)
     stream, file_record = await service.download_stream(
         uuid_mod.UUID(file_id), current_user.id, trace_id=trace_id)
@@ -112,7 +103,7 @@ async def delete_file(
     storage: StorageService = Depends(get_storage_service),  # noqa: B008
     request: Request = None,  # noqa: B008
 ) -> MessageResponse:
-    trace_id = _get_trace_id(request) if request else ""
+    trace_id = get_trace_id(request) if request else ""
     await FileService(db, storage_service=storage).delete(uuid_mod.UUID(file_id), current_user.id, trace_id=trace_id)
     return MessageResponse(success=True, message="File moved to trash", code="FILE_DELETED")
 
@@ -136,7 +127,7 @@ async def copy_file(
     storage: StorageService = Depends(get_storage_service),  # noqa: B008
     request: Request = None,  # noqa: B008
 ) -> FileMetadataResponse:
-    trace_id = _get_trace_id(request) if request else ""
+    trace_id = get_trace_id(request) if request else ""
     return await FileService(db, storage_service=storage).copy(
         uuid_mod.UUID(file_id), current_user.id, copy_req.target_parent_id, trace_id=trace_id
     )

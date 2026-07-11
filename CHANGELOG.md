@@ -24,13 +24,26 @@ Full feature set: Authentication, file management with streaming, folder hierarc
 
 ## [Unreleased]
 
-### Planned
+### Added
 
-- Folder tree with recursive move/copy (Phase 4)
-- Trash with restore and permanent delete (Phase 4)
-- File sharing with public/private links (Phase 5+)
-- File versioning (Phase 5+)
-- Full-text search (Phase 5+)
+- Frontend Container App Terraform resource
+- Deployment validation script (`scripts/validate_deployment.sh`)
+- Architecture documentation (`docs/architecture.md`)
+- Release notes (`docs/RELEASE.md`)
+
+### Changed
+
+- Next.js 15 → 16
+- ESLint 8 → 9 (flat config)
+- React Query integration across all pages
+
+### Fixed
+
+- SQLAlchemy URL.create() for password encoding in database URLs
+- Redis TLS/SSL configuration for Azure Managed Redis
+- PostgreSQL firewall rule for Container App egress
+- Alembic ConfigParser interpolation crash with URL-encoded passwords
+- Production validation: graceful Redis degradation when unavailable
 
 ---
 

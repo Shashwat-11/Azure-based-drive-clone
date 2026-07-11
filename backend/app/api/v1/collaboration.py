@@ -5,6 +5,7 @@ import uuid as uuid_mod
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1._common import get_trace_id
 from app.dependencies.auth import get_current_user
 from app.dependencies.database import get_db
 from app.schemas.auth import UserResponse
@@ -24,10 +25,6 @@ from app.services.sharing import LinkService, PermissionService
 router = APIRouter(prefix="/collaboration", tags=["Collaboration"])
 
 
-def _get_trace_id(request: Request) -> str:
-    return getattr(request.state, "trace_id", "")
-
-
 @router.post("/share/{resource_type}/{resource_id}", response_model=PermissionResponse)
 async def share_resource(
     resource_type: str,
@@ -37,7 +34,7 @@ async def share_resource(
     db: AsyncSession = Depends(get_db),  # noqa: B008
     request: Request = None,  # noqa: B008
 ) -> PermissionResponse:
-    trace_id = _get_trace_id(request) if request else ""
+    trace_id = get_trace_id(request) if request else ""
     service = PermissionService(db)
     return await service.share(
         resource_type, uuid_mod.UUID(resource_id), current_user.id, request_data, trace_id=trace_id
@@ -110,7 +107,7 @@ async def transfer_ownership(
     db: AsyncSession = Depends(get_db),  # noqa: B008
     request: Request = None,  # noqa: B008
 ) -> MessageResponse:
-    trace_id = _get_trace_id(request) if request else ""
+    trace_id = get_trace_id(request) if request else ""
     service = PermissionService(db)
     await service.transfer_ownership(
         resource_type, uuid_mod.UUID(resource_id), current_user.id, request_data.new_owner_id,

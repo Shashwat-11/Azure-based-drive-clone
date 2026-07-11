@@ -4,12 +4,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.logging_config import get_logger
 from app.dependencies.database import get_db
 from app.dependencies.redis import get_redis
 from app.storage.azure_blob import AzureBlobStorageBackend
-
-logger = get_logger(__name__)
 
 router = APIRouter(tags=["Health"])
 

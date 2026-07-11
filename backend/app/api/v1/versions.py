@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1._common import get_trace_id
 from app.dependencies.auth import get_current_user
 from app.dependencies.database import get_db
 from app.dependencies.storage import get_storage_service
@@ -16,10 +17,6 @@ from app.services.storage import StorageService
 from app.services.versioning import VersionService
 
 router = APIRouter(prefix="/versions", tags=["Versions"])
-
-
-def _get_trace_id(request: Request) -> str:
-    return getattr(request.state, "trace_id", "")
 
 
 async def _verify_file_access(file_id: str, user_id: uuid_mod.UUID, db: AsyncSession) -> None:
@@ -101,7 +98,7 @@ async def restore_version(
     request: Request = None,  # noqa: B008
 ) -> VersionResponse:
     await _verify_version_access(version_id, current_user.id, db)
-    trace_id = _get_trace_id(request) if request else ""
+    trace_id = get_trace_id(request) if request else ""
     service = VersionService(db, storage_service=storage)
     return await service.restore_version(uuid_mod.UUID(version_id), current_user.id, trace_id=trace_id)
 

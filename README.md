@@ -1,43 +1,43 @@
 # Drive — Cloud Storage Platform
 
-Production-grade cloud storage platform with file management, collaboration, version history, and full-text search.
+Production-grade cloud storage platform with file management, real-time collaboration, version history, full-text search, and enterprise-grade observability.
 
 ```mermaid
-graph TD
-    A[Next.js Frontend] --> B[FastAPI Backend]
-    B --> C[PostgreSQL]
-    B --> D[Redis]
-    B --> E[Azure Blob Storage]
-    B --> F[Application Insights]
-    B --> G[Prometheus /metrics]
+graph TB
+    FE[Next.js 16 Frontend] --> CA[Azure Container Apps]
+    CA --> PG[(PostgreSQL 16)]
+    CA --> REDIS[(Azure Managed Redis)]
+    CA --> BLOB[(Azure Blob Storage)]
+    CA --> AI[Application Insights]
 ```
 
 ## Features
 
-- **Authentication** — JWT with refresh token rotation, Argon2 password hashing, RBAC (admin/user/viewer)
-- **File Management** — Upload, download, move, copy, rename, delete, streaming with SHA-256 checksums
-- **Folder Hierarchy** — Unlimited nesting, recursive operations, breadcrumbs, folder size calculation
-- **Trash System** — Soft delete, restore, permanent delete, empty trash with orphan cleanup
-- **Version History** — Immutable versions, restore via blob copy, current version pointer
+- **Authentication** — JWT with refresh token rotation, Argon2 password hashing, RBAC
+- **File Management** — Upload, download, move, copy, rename, delete with SHA-256 checksums
+- **Folder Hierarchy** — Unlimited nesting, breadcrumbs, recursive operations
+- **Trash System** — Soft delete, restore, permanent delete, empty trash
+- **Version History** — Immutable versions, restore via blob copy
 - **Collaboration** — Share files/folders, inherited permissions, ownership transfer
-- **Shared Links** — Public and private links, password protection, expiry, download limits
-- **Search** — Filename, extension, MIME type, tags, favorites, permission-aware filtering
-- **Observability** — Structured JSON logging, correlation IDs, Prometheus metrics, OpenTelemetry tracing
-- **Security** — Rate limiting, security headers, input validation, path traversal protection
+- **Shared Links** — Public/private links, password protection, expiry
+- **Search** — Full-text search, tags, favorites, permission-aware filtering
+- **Observability** — Structured JSON logging, correlation IDs, OpenTelemetry tracing
+- **Security** — Rate limiting, security headers, input validation, CORS
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Backend | FastAPI, SQLAlchemy 2.x, Alembic, Pydantic v2 |
-| Database | PostgreSQL 16 |
-| Cache | Redis 7 |
+| Frontend | Next.js 16, React 19, TypeScript, TailwindCSS 3 |
+| Backend | FastAPI, Python 3.13, SQLAlchemy 2.x (async), Pydantic v2 |
+| Database | PostgreSQL 16 (Azure Flexible Server) |
+| Cache | Azure Managed Redis (Balanced_B0) |
 | Storage | Azure Blob Storage |
-| Auth | JWT, Argon2 |
-| Observability | structlog, Prometheus, OpenTelemetry |
-| Frontend | Next.js 15, TypeScript, TailwindCSS |
-| IaC | Terraform |
+| Auth | JWT (python-jose), Argon2 (passlib) |
+| Observability | structlog, OpenTelemetry, Application Insights |
+| IaC | Terraform (azurerm v4, azapi v2) |
 | CI/CD | GitHub Actions |
+| Container | Docker (multi-stage builds) |
 
 ## Quick Start
 
@@ -51,126 +51,132 @@ docker compose up --build
 - Health: http://localhost:8000/api/v1/health
 - Metrics: http://localhost:8000/metrics
 
-## Project Documentation
-
-| Document | Purpose |
-|---|---|
-| [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) | Architecture Decision Records |
-| [CHANGELOG.md](CHANGELOG.md) | Release history |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Development guide |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | Azure deployment guide |
-| [PERFORMANCE.md](PERFORMANCE.md) | Performance characteristics |
-| [SECURITY.md](SECURITY.md) | Security architecture |
-| [OBSERVABILITY.md](OBSERVABILITY.md) | Monitoring and logging |
-| [RELEASE.md](RELEASE.md) | Release checklist |
-
 ## Project Structure
 
 ```
-Drive/
 ├── backend/
 │   ├── app/
-│   │   ├── api/v1/          # REST endpoints
-│   │   ├── config/          # Settings (Pydantic)
-│   │   ├── core/            # Logging, exceptions, cache, retry
-│   │   ├── dependencies/    # DI (auth, db, redis, storage, permissions)
-│   │   ├── middleware/       # ASGI middleware
-│   │   ├── models/          # SQLAlchemy ORM models
-│   │   ├── repositories/    # Data access (Repository Pattern)
-│   │   ├── schemas/         # Pydantic DTOs
-│   │   ├── services/        # Business logic
-│   │   └── storage/         # Storage abstraction + Azure
-│   ├── migrations/          # Alembic
-│   └── tests/
-├── frontend/                # Next.js App Router
-├── infra/terraform/         # Azure IaC
-├── .github/                 # CI/CD workflows, templates
-├── docker-compose.yml       # Development
-├── docker-compose.prod.yml  # Production
-└── README.md
+│   │   ├── api/v1/           # REST endpoints (auth, files, folders, collaboration, versions, discovery)
+│   │   ├── services/         # Business logic
+│   │   ├── repositories/     # Data access (Repository pattern)
+│   │   ├── models/           # SQLAlchemy ORM models
+│   │   ├── schemas/          # Pydantic DTOs
+│   │   ├── middleware/       # ASGI middleware (security, logging, rate limiting)
+│   │   ├── dependencies/     # Dependency injection
+│   │   ├── storage/          # Blob storage abstraction + Azure implementation
+│   │   ├── auth/             # JWT + password utilities
+│   │   ├── config/           # Pydantic Settings
+│   │   └── core/             # Logging, exceptions, OpenTelemetry
+│   ├── migrations/           # Alembic
+│   ├── tests/                # pytest (215 tests)
+│   └── Dockerfile.prod
+├── frontend/
+│   ├── app/                  # Next.js App Router
+│   │   ├── (auth)/           # Login, Register
+│   │   └── (dashboard)/      # Drive, Recent, Shared, Trash, Settings
+│   ├── components/           # UI, Layout, Files, Auth
+│   ├── contexts/             # Auth, Toast
+│   ├── hooks/                # React Query hooks
+│   ├── services/             # API layer with JWT interceptor
+│   └── types/                # TypeScript interfaces
+├── infra/terraform/          # Azure IaC
+├── scripts/                  # Deployment validation
+├── docs/                     # Architecture, Release notes
+├── .github/                  # CI/CD workflows, templates
+└── docker-compose.yml        # Development
+    docker-compose.prod.yml   # Production simulation
 ```
 
-## API Endpoints
+## Local Development
 
-### Authentication
-| Method | Path | Description |
-|---|---|---|
-| POST | /api/v1/auth/register | Register |
-| POST | /api/v1/auth/login | Login |
-| POST | /api/v1/auth/refresh | Refresh tokens |
-| POST | /api/v1/auth/logout | Logout |
-| GET | /api/v1/auth/me | Current user |
+```bash
+# Backend
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload --port 8000
 
-### Files
-| Method | Path | Description |
-|---|---|---|
-| POST | /api/v1/files/upload | Upload file |
-| GET | /api/v1/files | List files |
-| GET | /api/v1/files/{id} | File metadata |
-| GET | /api/v1/files/{id}/download | Download (streaming) |
-| PATCH | /api/v1/files/{id}/metadata | Update metadata |
-| DELETE | /api/v1/files/{id} | Move to trash |
-| POST | /api/v1/files/{id}/move | Move |
-| POST | /api/v1/files/{id}/copy | Copy |
-| POST | /api/v1/files/{id}/restore | Restore |
-| DELETE | /api/v1/files/{id}/permanent | Permanent delete |
-| POST | /api/v1/files/{id}/rename | Rename |
-
-### Folders
-| Method | Path | Description |
-|---|---|---|
-| POST | /api/v1/folders | Create |
-| GET | /api/v1/folders | List |
-| GET | /api/v1/folders/{id} | Details |
-| PATCH | /api/v1/folders/{id} | Update |
-| DELETE | /api/v1/folders/{id} | Move to trash |
-| GET | /api/v1/folders/{id}/breadcrumbs | Breadcrumbs |
-| GET | /api/v1/folders/{id}/size | Size calculation |
-| GET | /api/v1/folders/{id}/children | Children |
-| GET | /api/v1/folders/trash/all | Trash listing |
-| POST | /api/v1/folders/trash/empty | Empty trash |
-
-### Versions
-| Method | Path | Description |
-|---|---|---|
-| GET | /api/v1/versions/file/{id} | List versions |
-| GET | /api/v1/versions/{id} | Version metadata |
-| GET | /api/v1/versions/{id}/download | Download version |
-| POST | /api/v1/versions/{id}/restore | Restore version |
-| DELETE | /api/v1/versions/{id} | Delete version |
-
-### Discovery
-| Method | Path | Description |
-|---|---|---|
-| GET | /api/v1/search | Search files |
-| GET | /api/v1/search/suggestions | Autocomplete |
-| GET | /api/v1/favorites | List favorites |
-| POST | /api/v1/favorites/{id} | Add favorite |
-| DELETE | /api/v1/favorites/{id} | Remove favorite |
-| GET | /api/v1/recent | Recent files |
-| GET | /api/v1/tags | List tags |
-| POST | /api/v1/tags | Create tag |
-
-### Health
-| Method | Path | Description |
-|---|---|---|
-| GET | /api/v1/health | Basic health |
-| GET | /api/v1/live | Liveness |
-| GET | /api/v1/ready | Readiness (DB/Redis/Storage) |
-| GET | /api/v1/startup | Startup probe |
-| GET | /metrics | Prometheus metrics |
+# Frontend
+cd frontend
+npm install
+npm run dev
+```
 
 ## Testing
 
 ```bash
+# Backend (215 tests)
 cd backend
-pip install -e ".[dev]"
-pytest tests/ -v --cov=app --cov-report=term
+pip install pytest pytest-asyncio pytest-cov
+pytest tests/ -v --cov=app
+
+# Frontend
+cd frontend
+npm run lint
+npm run build
 ```
 
 ## Deployment
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for Azure deployment instructions using Terraform and GitHub Actions.
+```bash
+# 1. Apply infrastructure
+cd infra/terraform
+terraform plan
+terraform apply
+
+# 2. Deploy application (automated via GitHub Actions)
+git push origin main
+
+# 3. Validate deployment
+bash scripts/validate_deployment.sh
+```
+
+## Azure Architecture
+
+| Resource | SKU | Purpose |
+|---|---|---|
+| Container App (backend) | 0.5 CPU, 1Gi | FastAPI |
+| Container App (frontend) | 0.5 CPU, 1Gi | Next.js |
+| PostgreSQL Flexible Server | B_Standard_B1ms | Database |
+| Managed Redis | Balanced_B0 | Rate limiting |
+| Storage Account | Standard LRS | Blob storage |
+| Key Vault | Standard | Secrets |
+| Container Registry | Basic | Docker images |
+| Application Insights | — | Observability |
+| Log Analytics | PerGB2018 | Centralized logs |
+
+## API Endpoints (59 total)
+
+See interactive docs at `/docs` when running locally.
+
+| Group | Prefix | Endpoints |
+|---|---|---|
+| Auth | `/auth` | register, login, refresh, logout, me |
+| Files | `/files` | upload, list, get, download, delete, rename, move, copy, restore |
+| Folders | `/folders` | create, list, get, delete, rename, breadcrumbs, trash |
+| Collaboration | `/collaboration` | share, permissions, links, ownership transfer |
+| Versions | `/versions` | list, get, download, restore, delete |
+| Discovery | `/` | search, suggestions, tags, favorites, recent, metadata |
+
+## CI/CD
+
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| `ci.yml` | PR + push to main | Lint, test, Docker build |
+| `cd.yml` | Push to main + tags | Build, push to ACR, deploy, health check |
+| `validate-deployment.yml` | Manual | 12-step smoke test against production |
+
+## Documentation
+
+| Document | Purpose |
+|---|---|
+| [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) | Architecture Decision Records |
+| [docs/architecture.md](docs/architecture.md) | Full system architecture |
+| [docs/RELEASE.md](docs/RELEASE.md) | Release notes |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Development guide |
+| [SECURITY.md](SECURITY.md) | Security architecture |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
 
 ## License
 
