@@ -1,18 +1,25 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 
 export function RegisterForm() {
-  const { register } = useAuth();
+  const { register, isAuthenticated } = useAuth();
+  const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  if (isAuthenticated) {
+    router.replace("/drive");
+    return null;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -24,6 +31,7 @@ export function RegisterForm() {
     setIsLoading(true);
     try {
       await register(email, password, fullName);
+      router.replace("/drive");
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Registration failed";

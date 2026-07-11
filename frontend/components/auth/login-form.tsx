@@ -1,17 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Link from "next/link";
 
 export function LoginForm() {
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  if (isAuthenticated) {
+    router.replace("/drive");
+    return null;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -19,6 +26,7 @@ export function LoginForm() {
     setIsLoading(true);
     try {
       await login(email, password);
+      router.replace("/drive");
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : "Invalid email or password";
