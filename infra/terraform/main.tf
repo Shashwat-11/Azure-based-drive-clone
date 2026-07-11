@@ -8,10 +8,6 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.5"
     }
-    azapi = {
-      source  = "azure/azapi"
-      version = "~> 2.0"
-    }
   }
   required_version = ">= 1.5"
 }
@@ -127,6 +123,15 @@ resource "azurerm_postgresql_flexible_server_database" "main" {
   server_id = azurerm_postgresql_flexible_server.main.id
 }
 
+# Allow the Container App Environment's outbound IP to reach PostgreSQL.
+# PostgreSQL Flexible Server with zero firewall rules defaults to "deny all".
+resource "azurerm_postgresql_flexible_server_firewall_rule" "container_app" {
+  name             = "allow-cae-drive-production"
+  server_id        = azurerm_postgresql_flexible_server.main.id
+  start_ip_address = azurerm_container_app_environment.main.static_ip_address
+  end_ip_address   = azurerm_container_app_environment.main.static_ip_address
+}
+
 # ── Key Vault Secrets ───────────────────────────────────
 
 resource "random_password" "jwt_secret" {
@@ -164,28 +169,6 @@ resource "azurerm_managed_redis" "main" {
   sku_name            = "Balanced_B0"
 
   default_database {}
-}
-
-# Balanced_B0 SKU disables access keys by default (Entra ID only).
-# Enable access key authentication so redis-py can connect with a password.
-resource "azapi_update_resource" "redis_enable_access_keys" {
-  type        = "Microsoft.Cache/redisEnterprise@2025-07-01"
-  resource_id = azurerm_managed_redis.main.id
-  body = {
-    properties = {
-      disableAccessKeyAuthentication = false
-    }
-  }
-}
-
-# azurerm_managed_redis does not export access keys.
-# Call listKeys on the default database to retrieve them.
-data "azapi_resource_action" "redis_list_keys" {
-  depends_on             = [azapi_update_resource.redis_enable_access_keys]
-  type                   = "Microsoft.Cache/redisEnterprise/databases@2025-07-01"
-  resource_id            = "${azurerm_managed_redis.main.id}/databases/default"
-  action                 = "listKeys"
-  response_export_values = ["primaryKey"]
 }
 
 # ── Storage ─────────────────────────────────────────────
