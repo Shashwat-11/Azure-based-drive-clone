@@ -1,29 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { SharedItem } from "@/types";
-import api from "@/services/api";
+import { useSharedItems } from "@/hooks/use-data";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/constants";
 
 export default function SharedPage() {
-  const [sharedWithMe, setSharedWithMe] = useState<SharedItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const { data } = await api.get("/collaboration/shared-with-me");
-        setSharedWithMe(data.items || []);
-      } catch {
-        setError("Failed to load shared files");
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    load();
-  }, []);
+  const { data: items = [], isLoading, isError } = useSharedItems();
 
   if (isLoading) {
     return (
@@ -41,14 +23,12 @@ export default function SharedPage() {
   return (
     <div className="p-6">
       <h1 className="text-xl font-semibold text-slate-100 mb-6">Shared with me</h1>
-      {error ? (
+      {isError ? (
         <div className="flex flex-col items-center py-20">
-          <p className="text-slate-400 mb-4">{error}</p>
-          <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>
-            Try again
-          </Button>
+          <p className="text-slate-400 mb-4">Failed to load shared files</p>
+          <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>Try again</Button>
         </div>
-      ) : sharedWithMe.length === 0 ? (
+      ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-4">
             <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -59,25 +39,14 @@ export default function SharedPage() {
         </div>
       ) : (
         <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-          {sharedWithMe.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center gap-4 px-4 py-3 border-b border-slate-800 last:border-0"
-            >
-              <span className="text-xl">
-                {item.resource_type === "folder" ? "📁" : "📄"}
-              </span>
+          {items.map((item) => (
+            <div key={item.id} className="flex items-center gap-4 px-4 py-3 border-b border-slate-800 last:border-0">
+              <span className="text-xl">{item.resource_type === "folder" ? "📁" : "📄"}</span>
               <div className="flex-1">
-                <p className="text-sm text-slate-200">
-                  {item.resource_name || item.resource_id}
-                </p>
-                <p className="text-xs text-slate-500">
-                  Shared by {item.owner_email || "unknown"} · {item.role}
-                </p>
+                <p className="text-sm text-slate-200">{item.resource_name || item.resource_id}</p>
+                <p className="text-xs text-slate-500">Shared by {item.owner_email || "unknown"} · {item.role}</p>
               </div>
-              <span className="text-xs text-slate-500">
-                {item.created_at ? formatDate(item.created_at) : ""}
-              </span>
+              <span className="text-xs text-slate-500">{item.created_at ? formatDate(item.created_at) : ""}</span>
             </div>
           ))}
         </div>

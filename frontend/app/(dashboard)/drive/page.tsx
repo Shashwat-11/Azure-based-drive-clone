@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { FileItem, Folder, Breadcrumb } from "@/types";
-import { fileService, folderService } from "@/services/files";
+import { FileItem, Folder } from "@/types";
+import { useDriveData, useDriveMutations } from "@/hooks/use-drive";
 import { FileRow, FolderCard } from "@/components/files/file-row";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { Modal } from "@/components/ui/modal";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FileRowSkeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/contexts/toast-context";
-import api from "@/services/api";
+import { API_URL, TOKEN_KEY } from "@/lib/constants";
 
 export default function DrivePage() {
   const searchParams = useSearchParams();
@@ -21,15 +21,15 @@ export default function DrivePage() {
   const folderId = searchParams.get("folder") || null;
   const searchQuery = searchParams.get("search") || null;
 
-  const [folders, setFolders] = useState<Folder[]>([]);
-  const [files, setFiles] = useState<FileItem[]>([]);
-  const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { folders, files, breadcrumbs, isLoading, isError } = useDriveData(
+    folderId,
+    searchQuery
+  );
+  const { createFolder, deleteFile, deleteFolder, renameFile, renameFolder } =
+    useDriveMutations(folderId);
 
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
-
   const [renaming, setRenaming] = useState<{
     type: "file" | "folder";
     id: string;
@@ -37,105 +37,35 @@ export default function DrivePage() {
   } | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    setError("");
-    try {
-      if (searchQuery) {
-        const result = await fileService.search(searchQuery);
-        setFiles(result.files);
-        setFolders([]);
-        setBreadcrumbs([]);
-      } else {
-        const [folderData, fileData] = await Promise.all([
-          folderService.list(folderId),
-          fileService.list(folderId),
-        ]);
-        setFolders(folderData.folders);
-        setFiles(fileData.files);
-
-        if (folderId) {
-          try {
-            const bc = await folderService.breadcrumbs(folderId);
-            setBreadcrumbs(bc.breadcrumbs);
-          } catch {
-            setBreadcrumbs([]);
-          }
-        } else {
-          setBreadcrumbs([]);
-        }
-      }
-    } catch {
-      setError("Failed to load files. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [folderId, searchQuery]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  const navigateToFolder = (f: Folder) => {
+  const navigateToFolder = (f: Folder) =>
     router.push(`/drive?folder=${f.id}`);
-  };
 
-  const handleCreateFolder = async () => {
+  const handleCreateFolder = () => {
     if (!newFolderName.trim()) return;
-    try {
-      await folderService.create(newFolderName.trim(), folderId);
-      setShowNewFolder(false);
-      setNewFolderName("");
-      addToast("Folder created", "success");
-      loadData();
-    } catch {
-      addToast("Failed to create folder", "error");
-    }
+    createFolder.mutate(newFolderName.trim(), {
+      onSuccess: () => {
+        setShowNewFolder(false);
+        setNewFolderName("");
+      },
+    });
   };
 
-  const handleDeleteFile = async (file: FileItem) => {
-    try {
-      await fileService.delete(file.id);
-      addToast("File moved to trash", "success");
-      loadData();
-    } catch {
-      addToast("Failed to delete file", "error");
-    }
-  };
-
-  const handleDeleteFolder = async (folder: Folder) => {
-    try {
-      await folderService.delete(folder.id);
-      addToast("Folder moved to trash", "success");
-      loadData();
-    } catch {
-      addToast("Failed to delete folder", "error");
-    }
-  };
-
-  const handleRename = async () => {
+  const handleRename = () => {
     if (!renaming || !renameValue.trim()) return;
-    try {
-      if (renaming.type === "file") {
-        await fileService.rename(renaming.id, renameValue.trim());
-      } else {
-        await folderService.rename(renaming.id, renameValue.trim());
-      }
-      addToast("Renamed", "success");
-      setRenaming(null);
-      loadData();
-    } catch {
-      addToast("Failed to rename", "error");
-    }
+    const mutation =
+      renaming.type === "file"
+        ? () => renameFile.mutate({ id: renaming.id, name: renameValue.trim() })
+        : () => renameFolder.mutate({ id: renaming.id, name: renameValue.trim() });
+    mutation();
+    setRenaming(null);
   };
 
   const handleDownload = async (file: FileItem) => {
     try {
-      const token = localStorage.getItem("drive_access_token");
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"}/files/${file.id}/download`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const token = localStorage.getItem(TOKEN_KEY);
+      const response = await fetch(`${API_URL}/files/${file.id}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!response.ok) throw new Error("Download failed");
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -149,7 +79,11 @@ export default function DrivePage() {
     }
   };
 
-  const startRename = (type: "file" | "folder", id: string, name: string) => {
+  const startRename = (
+    type: "file" | "folder",
+    id: string,
+    name: string
+  ) => {
     setRenaming({ type, id, name });
     setRenameValue(name);
   };
@@ -187,15 +121,15 @@ export default function DrivePage() {
             <FileRowSkeleton key={i} />
           ))}
         </div>
-      ) : error ? (
+      ) : isError ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-4">
             <svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
             </svg>
           </div>
-          <p className="text-slate-400 mb-4">{error}</p>
-          <Button variant="secondary" size="sm" onClick={loadData}>
+          <p className="text-slate-400 mb-4">Failed to load files. Please try again.</p>
+          <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>
             Try again
           </Button>
         </div>
@@ -215,11 +149,7 @@ export default function DrivePage() {
               : "Upload files or create a new folder to get started"}
           </p>
           {!searchQuery && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setShowNewFolder(true)}
-            >
+            <Button variant="primary" size="sm" onClick={() => setShowNewFolder(true)}>
               Create folder
             </Button>
           )}
@@ -231,7 +161,7 @@ export default function DrivePage() {
               key={folder.id}
               folder={folder}
               onClick={navigateToFolder}
-              onDelete={handleDeleteFolder}
+              onDelete={(f) => deleteFolder.mutate(f.id)}
               onRename={(f) => startRename("folder", f.id, f.name)}
             />
           ))}
@@ -239,7 +169,7 @@ export default function DrivePage() {
             <FileRow
               key={file.id}
               item={file}
-              onDelete={handleDeleteFile}
+              onDelete={(f) => deleteFile.mutate(f.id)}
               onDownload={handleDownload}
               onRename={(f) => startRename("file", f.id, f.original_filename)}
             />
@@ -247,11 +177,7 @@ export default function DrivePage() {
         </div>
       )}
 
-      <Modal
-        isOpen={showNewFolder}
-        onClose={() => setShowNewFolder(false)}
-        title="New Folder"
-      >
+      <Modal isOpen={showNewFolder} onClose={() => setShowNewFolder(false)} title="New Folder">
         <div className="space-y-4">
           <Input
             label="Folder name"
@@ -259,51 +185,27 @@ export default function DrivePage() {
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
             autoFocus
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleCreateFolder();
-            }}
+            onKeyDown={(e) => { if (e.key === "Enter") handleCreateFolder(); }}
           />
           <div className="flex justify-end gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setShowNewFolder(false)}
-            >
-              Cancel
-            </Button>
-            <Button size="sm" onClick={handleCreateFolder}>
-              Create
-            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setShowNewFolder(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleCreateFolder}>Create</Button>
           </div>
         </div>
       </Modal>
 
-      <Modal
-        isOpen={renaming !== null}
-        onClose={() => setRenaming(null)}
-        title={`Rename ${renaming?.type === "folder" ? "Folder" : "File"}`}
-      >
+      <Modal isOpen={!!renaming} onClose={() => setRenaming(null)} title={`Rename ${renaming?.type === "folder" ? "Folder" : "File"}`}>
         <div className="space-y-4">
           <Input
             label="New name"
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             autoFocus
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleRename();
-            }}
+            onKeyDown={(e) => { if (e.key === "Enter") handleRename(); }}
           />
           <div className="flex justify-end gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setRenaming(null)}
-            >
-              Cancel
-            </Button>
-            <Button size="sm" onClick={handleRename}>
-              Rename
-            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setRenaming(null)}>Cancel</Button>
+            <Button size="sm" onClick={handleRename}>Rename</Button>
           </div>
         </div>
       </Modal>
