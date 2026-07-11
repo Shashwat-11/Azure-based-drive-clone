@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fileService, folderService } from "@/services/files";
+import { folderService } from "@/services/files";
 import api from "@/services/api";
 import { queryKeys } from "@/hooks/query-keys";
 import { FileItem, SharedItem, TrashItem } from "@/types";

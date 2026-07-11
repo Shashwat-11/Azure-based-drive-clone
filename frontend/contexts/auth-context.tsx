@@ -8,7 +8,7 @@ import {
   useCallback,
   ReactNode,
 } from "react";
-import { User, AuthState } from "@/types";
+import { AuthState } from "@/types";
 import { authService } from "@/services/auth";
 import { TOKEN_KEY, REFRESH_TOKEN_KEY } from "@/lib/constants";
 
