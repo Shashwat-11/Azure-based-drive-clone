@@ -10,14 +10,14 @@ export function useDriveData(folderId: string | null, searchQuery: string | null
     queryKey: queryKeys.folders(folderId),
     queryFn: () => folderService.list(folderId),
     enabled: !searchQuery,
-    staleTime: 30_000,
+    staleTime: 5_000,
   });
 
   const fileQuery = useQuery({
     queryKey: queryKeys.files(folderId),
     queryFn: () => fileService.list(folderId),
     enabled: !searchQuery,
-    staleTime: 30_000,
+    staleTime: 5_000,
   });
 
   const breadcrumbQuery = useQuery({
@@ -52,6 +52,10 @@ export function useDriveMutations(folderId: string | null) {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["folders"] });
     queryClient.invalidateQueries({ queryKey: ["files"] });
+    queryClient.invalidateQueries({ queryKey: ["search"] });
+    queryClient.invalidateQueries({ queryKey: ["recent"] });
+    queryClient.invalidateQueries({ queryKey: ["shared"] });
+    queryClient.invalidateQueries({ queryKey: ["trash"] });
     if (folderId) queryClient.invalidateQueries({ queryKey: queryKeys.breadcrumbs(folderId) });
   };
 

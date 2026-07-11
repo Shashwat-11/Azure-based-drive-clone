@@ -13,14 +13,20 @@ export function useRecentFiles() {
       const { data } = await api.get("/recent");
       const items = data.recent || data.items || [];
       return items.map((item: Record<string, unknown>) => ({
-        ...item,
-        id: item.id || item.file_id,
-        original_filename: item.file_name || item.original_filename || "Unknown",
-        file_size_bytes: item.file_size_bytes || 0,
-        version_number: item.version_number || 1,
+        id: (item.file_id || item.id || "") as string,
+        original_filename: (item.file_name || item.original_filename || "Unknown") as string,
+        file_size_bytes: (item.file_size_bytes || 0) as number,
+        version_number: (item.version_number || 1) as number,
+        mime_type: (item.mime_type || null) as string | null,
+        extension: (item.extension || null) as string | null,
+        checksum_sha256: (item.checksum_sha256 || null) as string | null,
+        folder_id: (item.folder_id || null) as string | null,
+        owner_id: (item.owner_id || "") as string,
+        created_at: (item.created_at || item.accessed_at || "") as string,
+        updated_at: (item.updated_at || item.accessed_at || "") as string,
       })) as FileItem[];
     },
-    staleTime: 30_000,
+    staleTime: 10_000,
   });
 }
 
