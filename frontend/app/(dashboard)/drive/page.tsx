@@ -40,6 +40,19 @@ export default function DrivePage() {
   const navigateToFolder = (f: Folder) =>
     router.push(`/drive?folder=${f.id}`);
 
+  const parentFolderId: string | null =
+    breadcrumbs.length > 1
+      ? breadcrumbs[breadcrumbs.length - 2].id
+      : null;
+
+  const navigateUp = () => {
+    if (parentFolderId) {
+      router.push(`/drive?folder=${parentFolderId}`);
+    } else {
+      router.push("/drive");
+    }
+  };
+
   const handleCreateFolder = () => {
     if (!newFolderName.trim()) return;
     createFolder.mutate(newFolderName.trim(), {
@@ -96,7 +109,20 @@ export default function DrivePage() {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <Breadcrumbs items={breadcrumbs} />
+        <div className="flex items-center gap-2">
+          {folderId && (
+            <button
+              onClick={navigateUp}
+              className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+              title="Go to parent folder"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+          )}
+          <Breadcrumbs items={breadcrumbs} />
+        </div>
         <div className="flex items-center gap-2">
           <Button
             variant="secondary"
